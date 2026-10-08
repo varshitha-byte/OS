@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\prave\OneDrive\Desktop\OS\WOLVES_Prototype\build\CMakeFiles\52da49f9c2ac6444581766bec956a89d\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{AD44F493-EA01-31A1-8738-87340F90458B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

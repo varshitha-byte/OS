@@ -1,0 +1,93 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{WOLVES: Prototyping a Metadata Write-Once File System for Persistent Memory}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Author Name}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{University Name}\\
+City, Country \\
+email@domain.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+Low-latency persistent memory (PM) encourages file systems to pursue synchronous crash consistency. However, existing approaches often incur many small, random, and ordered metadata I/Os, squandering PM performance. In this paper, we present a user-space prototype of WOLVES, a Metadata Write-Once File System (WOFS) inspired by recent advancements in OSDI '25. By encapsulating file operation metadata into a single, checksum-protected package, WOLVES eliminates redundant journaling overhead. This paper details our Version 1 implementation, the rationale behind our architectural design, current capabilities in data tracking and crash recovery, and outlines future scopes for advancing the prototype toward an OS-native file system.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Persistent Memory, File Systems, Crash Consistency, Write-Once Metadata
+\end{IEEEkeywords}
+
+\section{Introduction}
+With the advent of byte-addressable Persistent Memory (PM) technologies (e.g., Intel Optane, CXL-SSDs), file systems are increasingly bypassing the traditional block layer to achieve fast, synchronous I/Os. PM allows systems to persist data via simple CPU cache flushes, which has driven a shift towards synchronous crash consistency models. However, standard methods like Journaling (JFS) or Log-Structured File Systems (LFS) introduce redundant writes or strict ordering constraints, heavily penalizing the raw throughput potential of PM.
+
+Addressing these bottlenecks, the Metadata Write-Once File System (WOFS) model proposes a novel approach: aggregating the metadata for any file operation into a singular, checksum-protected package that is written to PM exactly once. In this project, we implement a Version 1 software prototype of WOLVES, a WOFS-based architecture, to practically evaluate these claims in a controlled environment.
+
+\section{Version 1 Implementation}
+For the initial phase of this project, we developed a standalone, user-space C++ prototype that successfully models the core WOFS algorithms. The implementation consists of three primary components:
+
+\subsection{Simulated Persistent Memory}
+We constructed a PM simulation layer that manages an 8-byte aligned contiguous memory array backed by a binary file (\texttt{simulated\_pmem.bin}). During normal execution, read and write operations interact directly with the memory buffer. Upon simulating a system crash, the buffer flushes to the underlying storage, effectively mimicking the \texttt{PCOMMIT} persistence semantics of hardware PM.
+
+\subsection{Write-Once Package Generation}
+Central to the WOLVES architecture is the elimination of ordered metadata journaling. We implemented a 64-byte \texttt{Package} structure containing a magic number identifier, operation type (e.g., \texttt{CREATE\_FILE}, \texttt{WRITE\_DATA}), target inode identifiers, and data extent pointers. Crucially, each package is protected by a checksum and written with a single ordering point.
+
+\subsection{Package Translation Layer}
+In WOFS, Virtual File System (VFS) structures (e.g., dentries, inodes) are not continuously maintained in PM. Instead, we implemented a Package Translation Layer (PTL) that serves as a recovery and mounting engine. Upon startup, the PTL sequentially scans the persistent memory, verifies the checksums of discovered packages, and dynamically rebuilds the in-memory \texttt{Inode} map and block extents.
+
+\section{Architectural Rationale}
+Implementing a full file system as a Linux Kernel Module introduces massive complexity, strict hardware prerequisites, and significant debugging overhead. We opted for a user-space C++ simulation for Version 1 based on the following rationales:
+
+\begin{itemize}
+    \item \textbf{Algorithmic Verification:} Decoupling the file system from the OS kernel allowed us to focus purely on the theoretical validity of the Write-Once Package and Translation Layer algorithms without OS-level interference.
+    \item \textbf{Hardware Independence:} Emulating PM via a persistent binary file enables the testing of "crash consistency" locally on standard, non-PM hardware (e.g., Windows architectures).
+    \item \textbf{Rapid Prototyping:} A standalone executable provides an immediate feedback loop for rapid iteration and simple unit testing via standard output (simulating crashes and tracking recovery states).
+\end{itemize}
+
+\section{Current Capabilities}
+The Version 1 prototype successfully demonstrates synchronous crash consistency. Its proven capabilities include:
+\begin{itemize}
+    \item \textbf{File Operations:} Full support for allocating \texttt{CREATE\_FILE}, appending via \texttt{WRITE\_DATA}, and unlinking via \texttt{DELETE\_FILE}.
+    \item \textbf{Data Extent Tracking:} The system dynamically maps file offsets to corresponding physical PM boundaries using extent lists embedded in the packages.
+    \item \textbf{Crash Recovery:} By simulating a hard power loss (memory wipe), the system can reboot and utilize the PTL to perfectly reconstruct all file names, sizes, and raw data bytes solely by reading the sequential write-once packages.
+    \item \textbf{Data Integrity:} Checksum verification guarantees that corrupted, incomplete, or torn package writes are safely ignored during recovery.
+\end{itemize}
+
+\section{Future Scope}
+Building upon the success of Version 1, several advanced features and architectural upgrades form the roadmap for future development:
+
+\subsection{OS-Native Memory Mapping (mmap)}
+To elevate the PM simulation to industry standards (e.g., Intel's PMDK), we plan to replace the manual array abstraction with OS-level Memory-Mapped Files (\texttt{mmap} on Linux or \texttt{MapViewOfFile} on Windows). This will allow direct CPU store instructions to persist data asynchronously.
+
+\subsection{Coarse Persistence and Garbage Collection}
+Currently, packages are appended indefinitely. Version 2 will introduce the paper's Coarse Persistence bitmap alongside a background Garbage Collection (GC) thread to compact and reclaim space from deleted files or overwritten data blocks.
+
+\subsection{Directory Hierarchy}
+We aim to expand the \texttt{OpType} enum to support hierarchical directory structures (\texttt{CREATE\_DIR}) and hard-linking, transitioning from a flat namespace to a fully-featured tree structure.
+
+\subsection{FUSE Integration}
+To transition from an isolated simulation to a highly usable file system, we intend to integrate the core C++ logic with FUSE (Filesystem in Userspace) on Linux. This will allow the OS to natively mount the prototype, enabling interaction via standard POSIX system calls.
+
+\section{Conclusion}
+The Version 1 prototype successfully validates the Metadata Write-Once File System (WOFS) model. By demonstrating that a file system can achieve robust synchronous crash consistency without the crippling overhead of traditional ordered journaling, WOLVES provides a highly efficient pathway for leveraging next-generation Persistent Memory technologies.
+
+\begin{thebibliography}{00}
+\bibitem{b1} Y. Pan, W. Xia, Y. Zhang, X. Zou, H. Huang, Z. Li, and C. Wu, ``Fast and Synchronous Crash Consistency with Metadata Write-Once File System,'' \emph{Proceedings of the 19th USENIX Symposium on Operating Systems Design and Implementation (OSDI '25)}, Boston, MA, USA, July 2025.
+\end{thebibliography}
+
+\end{document}
