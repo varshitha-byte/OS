@@ -20,11 +20,16 @@ static int wofs_getattr(const char *path, struct stat *stbuf) {
         return 0;
     }
 
-    uint32_t inode_id = wolves_fs->find_file(path);
+    uint32_t inode_id = wolves_fs->resolve_path(path);
     if (inode_id > 0) {
-        stbuf->st_mode = S_IFREG | 0644;
-        stbuf->st_nlink = 1;
-        stbuf->st_size = wolves_fs->get_file_size(inode_id);
+        if (wolves_fs->is_directory(inode_id)) {
+            stbuf->st_mode = S_IFDIR | 0755;
+            stbuf->st_nlink = 2;
+        } else {
+            stbuf->st_mode = S_IFREG | 0644;
+            stbuf->st_nlink = 1;
+            stbuf->st_size = wolves_fs->get_file_size(inode_id);
+        }
         return 0;
     }
 
@@ -36,14 +41,16 @@ static int wofs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     (void) offset;
     (void) fi;
 
-    if (strcmp(path, "/") != 0)
+    uint32_t dir_id = wolves_fs->resolve_path(path);
+    if (dir_id == 0 || !wolves_fs->is_directory(dir_id)) {
         return -ENOENT;
+    }
 
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
 
-    auto files = wolves_fs->get_all_filenames();
-    for (const auto& name : files) {
+    auto entries = wolves_fs->list_directory(dir_id);
+    for (const auto& name : entries) {
         filler(buf, name.c_str(), NULL, 0);
     }
 
@@ -51,11 +58,10 @@ static int wofs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int wofs_open(const char *path, struct fuse_file_info *fi) {
-    uint32_t inode_id = wolves_fs->find_file(path);
+    uint32_t inode_id = wolves_fs->resolve_path(path);
     if (inode_id == 0)
         return -ENOENT;
         
-    // Store inode_id in the file info for fast access during read/write
     fi->fh = inode_id;
     return 0;
 }
@@ -66,7 +72,7 @@ static int wofs_read(const char *path, char *buf, size_t size, off_t offset,
     if (inode_id == 0) return -ENOENT;
 
     size_t file_size = wolves_fs->get_file_size(inode_id);
-    if (offset >= file_size) return 0;
+    if (static_cast<size_t>(offset) >= file_size) return 0;
 
     if (offset + size > file_size)
         size = file_size - offset;
@@ -85,38 +91,74 @@ static int wofs_write(const char *path, const char *buf, size_t size, off_t offs
 }
 
 static int wofs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    std::string name = path;
-    if (!name.empty() && name[0] == '/') name = name.substr(1);
-    
-    uint32_t inode_id = wolves_fs->create_file(name);
-    fi->fh = inode_id;
-    return 0;
+    try {
+        uint32_t inode_id = wolves_fs->create_file(path);
+        fi->fh = inode_id;
+        return 0;
+    } catch (const std::exception& e) {
+        return -EIO;
+    }
+}
+
+static int wofs_mkdir(const char *path, mode_t mode) {
+    try {
+        wolves_fs->create_directory(path);
+        return 0;
+    } catch (const std::exception& e) {
+        return -EEXIST;
+    }
 }
 
 static int wofs_unlink(const char *path) {
-    uint32_t inode_id = wolves_fs->find_file(path);
+    uint32_t inode_id = wolves_fs->resolve_path(path);
     if (inode_id == 0) return -ENOENT;
 
-    wolves_fs->delete_file(inode_id);
-    return 0;
+    try {
+        wolves_fs->delete_file(inode_id);
+        return 0;
+    } catch (const std::exception& e) {
+        return -EIO;
+    }
+}
+
+static int wofs_rmdir(const char *path) {
+    uint32_t inode_id = wolves_fs->resolve_path(path);
+    if (inode_id == 0) return -ENOENT;
+
+    try {
+        wolves_fs->delete_directory(inode_id);
+        return 0;
+    } catch (const std::exception& e) {
+        return -ENOTEMPTY;
+    }
+}
+
+static int wofs_rename(const char *from, const char *to) {
+    try {
+        wolves_fs->rename(from, to);
+        return 0;
+    } catch (const std::exception& e) {
+        return -EIO;
+    }
 }
 
 static int wofs_truncate(const char *path, off_t size) {
-    // Basic support to satisfy standard file tools;
-    // Real truncation requires updating package metadata and removing trailing extents.
     return 0;
 }
 
 static struct fuse_operations wofs_oper = {};
 
 int main(int argc, char *argv[]) {
-    wofs_oper.getattr = wofs_getattr;
-    wofs_oper.readdir = wofs_readdir;
-    wofs_oper.open    = wofs_open;
-    wofs_oper.read    = wofs_read;
-    wofs_oper.write   = wofs_write;
-    wofs_oper.create  = wofs_create;
-    wofs_oper.unlink  = wofs_unlink;
+    wofs_oper.getattr  = wofs_getattr;
+    wofs_oper.readdir  = wofs_readdir;
+    wofs_oper.open     = wofs_open;
+    wofs_oper.read     = wofs_read;
+    wofs_oper.write    = wofs_write;
+    wofs_oper.create   = wofs_create;
+    wofs_oper.mkdir    = wofs_mkdir;
+    wofs_oper.unlink   = wofs_unlink;
+    wofs_oper.rmdir    = wofs_rmdir;
+    wofs_oper.rename   = wofs_rename;
     wofs_oper.truncate = wofs_truncate;
 
     // Initialize our PM Simulator and File System

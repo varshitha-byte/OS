@@ -1,3 +1,0 @@
-C:/Users/prave/OneDrive/Desktop/OS/WOLVES_Prototype/build/CMakeFiles/wolves_sim.dir
-C:/Users/prave/OneDrive/Desktop/OS/WOLVES_Prototype/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/prave/OneDrive/Desktop/OS/WOLVES_Prototype/build/CMakeFiles/ZERO_CHECK.dir

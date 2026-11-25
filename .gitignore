@@ -1,0 +1,47 @@
+# C/C++ Build Directories and Artifacts
+build/
+build_linux/
+WOLVES_Prototype/build/
+WOLVES_Prototype/build_linux/
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.tlog
+*.lastbuildstate
+*.recipe
+*.vcxproj*
+*.sln
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Persistent Memory Simulated Binary Images (100MB+)
+*.bin
+simulated_pmem*.bin
+
+# LaTeX Compilation Artifacts
+*.aux
+*.log
+*.out
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
+
+# Screenshot / Temporary Image Dumps
+page_*.png
+
+# Personal / External Class Notes (Keep local, don't track in repo)
+DOC-*.pdf
+memory_management_*.pdf
+PDFGallery_*.pdf
+project_report (*) (*).pdf
+*.docx
+
+# Environment / Editor / OS Files
+.freebuff/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
